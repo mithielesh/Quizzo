@@ -52,8 +52,20 @@ def update_subject(id):
 def delete_subject(id):
     subject = db.session.get(Subject, id)
     if not subject: return jsonify({'message': 'Not found'}), 404
+    
+    # Bottom-Up Cascade Delete
+    chapters = Chapter.query.filter_by(subject_id=id).all()
+    for c in chapters:
+        quizzes = Quiz.query.filter_by(chapter_id=c.id).all()
+        for q in quizzes:
+            Score.query.filter_by(quiz_id=q.id).delete()
+            Question.query.filter_by(quiz_id=q.id).delete()
+            db.session.delete(q)
+        db.session.delete(c)
+        
     db.session.delete(subject)
     db.session.commit()
+    cache.delete('user_quizzes')
     return jsonify({'message': 'Subject deleted'}), 200
 
 # --- CHAPTERS ---
@@ -84,8 +96,17 @@ def update_chapter(id):
 def delete_chapter(id):
     chapter = db.session.get(Chapter, id)
     if not chapter: return jsonify({'message': 'Not found'}), 404
+    
+    # Bottom-Up Cascade Delete
+    quizzes = Quiz.query.filter_by(chapter_id=id).all()
+    for q in quizzes:
+        Score.query.filter_by(quiz_id=q.id).delete()
+        Question.query.filter_by(quiz_id=q.id).delete()
+        db.session.delete(q)
+        
     db.session.delete(chapter)
     db.session.commit()
+    cache.delete('user_quizzes')
     return jsonify({'message': 'Chapter deleted'}), 200
 
 # --- QUIZZES ---
@@ -124,6 +145,11 @@ def update_quiz(id):
 def delete_quiz(id):
     quiz = db.session.get(Quiz, id)
     if not quiz: return jsonify({'message': 'Not found'}), 404
+    
+    # Bottom-Up Cascade Delete
+    Score.query.filter_by(quiz_id=id).delete()
+    Question.query.filter_by(quiz_id=id).delete()
+    
     db.session.delete(quiz)
     db.session.commit()
     cache.delete('user_quizzes')
@@ -178,7 +204,7 @@ def delete_question(id):
     return jsonify({'message': 'Question deleted'}), 200
 
 
-# --- STUDENTS (NEW UPDATE ROUTE) ---
+# --- STUDENTS (UPDATE & DELETE) ---
 @admin_bp.route('/students/<int:id>', methods=['PUT'])
 def update_student(id):
     student = db.session.get(User, id)
@@ -195,10 +221,23 @@ def update_student(id):
         try:
             student.dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
         except ValueError:
-            pass # Failsafe if format is incorrect
+            pass 
             
     db.session.commit()
     return jsonify({'message': 'Student details updated'}), 200
+
+@admin_bp.route('/students/<int:id>', methods=['DELETE'])
+def delete_student(id):
+    student = db.session.get(User, id)
+    if not student or student.role != 'user': 
+        return jsonify({'message': 'Student not found'}), 404
+        
+    # Safely clear student's scores before deleting the account
+    Score.query.filter_by(user_id=id).delete()
+    
+    db.session.delete(student)
+    db.session.commit()
+    return jsonify({'message': 'Student account deleted'}), 200
 
 
 # =====================================================
@@ -300,7 +339,6 @@ def search_students():
         ((User.full_name.ilike(f'%{query}%')) | (User.email.ilike(f'%{query}%')))
     ).all()
     
-    # MODIFIED: Include qualification and dob for the Edit Modal
     return jsonify([{
         'id': s.id, 
         'full_name': s.full_name, 
