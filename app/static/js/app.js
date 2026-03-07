@@ -57,7 +57,25 @@ const App = {
 
         const fetchSubjects = async () => { try{ const res = await fetch('/api/admin/subjects'); if(res.ok) subjects.value = await res.json(); }catch(e){} };
         const createSubject = async () => { const res = await fetch('/api/admin/subjects', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(newSubject)}); if(res.ok){ showModal('Success', 'Subject Created!', 'success'); subjects.value.push((await res.json()).subject); newSubject.name=''; newSubject.description=''; } };
-        const deleteItem = (type, id) => { showModal('Delete?', `Delete this ${type}?`, 'danger', async () => { try { const res = await fetch(`/api/admin/${type}s/${id}`, { method: 'DELETE' }); if (res.ok) { showModal('Deleted', 'Removed successfully.', 'success'); if (type === 'subject') fetchSubjects(); if (type === 'chapter') viewChapters(selectedSubject.value); if (type === 'quiz') viewQuizzes(selectedChapter.value); if (type === 'question') viewQuestions(selectedQuiz.value); } } catch(e) { showModal('Error', 'Delete failed', 'danger'); } }); };
+        
+        const deleteItem = (type, id) => { 
+            showModal('Delete?', `Delete this ${type}?`, 'danger', async () => { 
+                try { 
+                    const endpoint = type === 'quiz' ? 'quizzes' : type + 's'; 
+                    const res = await fetch(`/api/admin/${endpoint}/${id}`, { method: 'DELETE' }); 
+                    if (res.ok) { 
+                        showModal('Deleted', 'Removed successfully.', 'success'); 
+                        if (type === 'subject') fetchSubjects(); 
+                        if (type === 'chapter') viewChapters(selectedSubject.value); 
+                        if (type === 'quiz') viewQuizzes(selectedChapter.value); 
+                        if (type === 'question') viewQuestions(selectedQuiz.value); 
+                        if (type === 'student') searchStudents(); 
+                    } 
+                } catch(e) { 
+                    showModal('Error', 'Delete failed', 'danger'); 
+                } 
+            }); 
+        };
         
         const viewChapters = async (s) => { selectedSubject.value=s; const res = await fetch(`/api/admin/subjects/${s.id}/chapters`); if(res.ok) chapters.value=await res.json(); };
         const createChapter = async () => { const res = await fetch(`/api/admin/subjects/${selectedSubject.value.id}/chapters`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(newChapter)}); if(res.ok){ showModal('Success', 'Chapter Added!', 'success'); chapters.value.push((await res.json()).chapter); newChapter.name=''; newChapter.description=''; } };
@@ -82,28 +100,28 @@ const App = {
 
         const closeEditModal = () => { editContext.isVisible = false; };
 
-        const saveEdit = async () => {
-            try {
-                const res = await fetch(`/api/admin/${editContext.type}s/${editContext.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(editContext.payload)
-                });
-                if (res.ok) {
-                    showModal('Success', `Updated successfully.`, 'success');
-                    closeEditModal();
-                    // Refresh the appropriate list
-                    if (editContext.type === 'subject') fetchSubjects();
-                    if (editContext.type === 'chapter') viewChapters(selectedSubject.value);
-                    if (editContext.type === 'quiz') viewQuizzes(selectedChapter.value);
-                    if (editContext.type === 'question') viewQuestions(selectedQuiz.value);
-                    if (editContext.type === 'student') searchStudents(); // Refresh Student list
-                } else {
-                    showModal('Error', 'Failed to update.', 'danger');
-                }
-            } catch (e) {
-                showModal('Error', 'Network error.', 'danger');
-            }
+        const saveEdit = async () => { 
+            try { 
+                const endpoint = editContext.type === 'quiz' ? 'quizzes' : editContext.type + 's'; 
+                const res = await fetch(`/api/admin/${endpoint}/${editContext.id}`, { 
+                    method: 'PUT', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify(editContext.payload) 
+                }); 
+                if (res.ok) { 
+                    showModal('Success', 'Updated successfully.', 'success'); 
+                    closeEditModal(); 
+                    if (editContext.type === 'subject') fetchSubjects(); 
+                    if (editContext.type === 'chapter') viewChapters(selectedSubject.value); 
+                    if (editContext.type === 'quiz') viewQuizzes(selectedChapter.value); 
+                    if (editContext.type === 'question') viewQuestions(selectedQuiz.value); 
+                    if (editContext.type === 'student') searchStudents(); 
+                } else { 
+                    showModal('Error', 'Failed to update.', 'danger'); 
+                } 
+            } catch (e) { 
+                showModal('Error', 'Network error.', 'danger'); 
+            } 
         };
 
         // --- ADMIN ANALYTICS ---
@@ -306,7 +324,7 @@ const App = {
                 <div v-if="user.role === 'admin'">
                     <div class="d-flex mb-4">
                         <button class="btn me-2 px-4 shadow-sm" :class="adminView === 'manage' ? 'btn-dark' : 'btn-outline-dark'" @click="adminView = 'manage'">Manage Content</button>
-                        <button class="btn px-4 shadow-sm" :class="adminView === 'analytics' ? 'btn-dark' : 'btn-outline-dark'" @click="adminView = 'analytics'">Analytics & Reports</button>
+                        <button class="btn px-4 shadow-sm" :class="adminView === 'analytics' ? 'btn-dark' : 'btn-outline-dark'" @click="adminView = 'analytics'; fetchAnalyticsQuizzes();">Analytics & Reports</button>
                     </div>
 
                     <div v-if="adminView === 'manage'">
@@ -343,6 +361,7 @@ const App = {
                                                     <div><strong>{{ s.full_name }}</strong> <small class="text-muted ms-2">{{ s.email }}</small></div>
                                                     <div>
                                                         <button class="btn btn-sm btn-outline-secondary me-2" @click="openEditModal('student', s)">Edit</button>
+                                                        <button class="btn btn-sm btn-outline-danger me-2" @click="deleteItem('student', s.id)">Delete</button>
                                                         <button class="btn btn-sm btn-outline-primary" @click="viewStudentAnalytics(s.id)">View Profile</button>
                                                     </div>
                                                 </div>
