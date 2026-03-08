@@ -6,6 +6,7 @@ from app.models.score import Score
 from app.extensions import db, cache
 from app.tasks import export_user_data
 import os
+from app.models.user import Notification
 
 user_bp = Blueprint('user', __name__, url_prefix='/api/user')
 
@@ -148,3 +149,45 @@ def download_csv(job_id):
         return send_file(filepath, as_attachment=True)
     else:
         return jsonify({'message': 'File not ready yet. Please try again in a few seconds.'}), 404
+
+# --- USER PROFILE & SETTINGS ---
+
+@user_bp.route('/profile', methods=['GET', 'PUT'])
+@login_required
+def user_profile():
+    if request.method == 'GET':
+        return jsonify({
+            'full_name': current_user.full_name,
+            'email': current_user.email,
+            'qualification': current_user.qualification,
+            'dob': current_user.dob,
+            'created_at': current_user.created_at.strftime('%Y-%m-%d') if current_user.created_at else '2000-01-01'
+        }), 200
+        
+    data = request.get_json()
+    
+    # Update regular details
+    current_user.full_name = data.get('full_name', current_user.full_name)
+    current_user.qualification = data.get('qualification', current_user.qualification)
+    current_user.dob = data.get('dob', current_user.dob)
+    
+    # Secure Password Update
+    new_password = data.get('new_password')
+    if new_password:
+        current_user.set_password(new_password)
+        
+    db.session.commit()
+    
+    # Update Vue's cache of the user's name
+    return jsonify({
+        'message': 'Profile updated successfully',
+        'full_name': current_user.full_name,
+        'qualification': current_user.qualification
+    }), 200
+
+@user_bp.route('/notifications', methods=['GET'])
+@login_required
+def get_notifications():
+    # FIX: Students ONLY see their personalized notifications now
+    notifs = Notification.query.filter_by(user_id=current_user.id).order_by(Notification.timestamp.desc()).limit(10).all()
+    return jsonify([n.to_dict() for n in notifs]), 200

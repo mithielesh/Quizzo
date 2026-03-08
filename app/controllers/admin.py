@@ -7,6 +7,7 @@ from app.models.score import Score
 from app.extensions import db, cache
 from datetime import datetime
 import sqlalchemy as sa
+from app.models.user import Notification
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
@@ -118,11 +119,26 @@ def get_quizzes(chapter_id):
 @admin_bp.route('/chapters/<int:chapter_id>/quizzes', methods=['POST'])
 def create_quiz(chapter_id):
     data = request.get_json()
+    
+    # --- BACKEND VALIDATION ---
+    try:
+        time_duration = int(data.get('time_duration', 30))
+    except ValueError:
+        return jsonify({'message': 'Validation Error: Invalid time format.'}), 400
+
+    if time_duration < 3 or time_duration > 30:
+        return jsonify({'message': 'Validation Error: Quiz duration must be between 3 and 30 minutes.'}), 400
+        
+    remarks = data.get('remarks', '')
+    if not remarks or len(remarks.strip()) == 0:
+        return jsonify({'message': 'Validation Error: Quiz title cannot be empty.'}), 400
+    # --------------------------
+
     new_quiz = Quiz(
         chapter_id=chapter_id,
         date_of_quiz=data.get('date_of_quiz'),
-        time_duration=data.get('time_duration'),
-        remarks=data.get('remarks')
+        time_duration=time_duration,
+        remarks=remarks.strip()
     )
     db.session.add(new_quiz)
     db.session.commit()
@@ -134,9 +150,25 @@ def update_quiz(id):
     quiz = db.session.get(Quiz, id)
     if not quiz: return jsonify({'message': 'Not found'}), 404
     data = request.get_json()
-    quiz.remarks = data.get('remarks', quiz.remarks)
+    
+    # --- BACKEND VALIDATION ---
+    if 'time_duration' in data:
+        try:
+            time_duration = int(data.get('time_duration'))
+            if time_duration < 3 or time_duration > 30:
+                return jsonify({'message': 'Validation Error: Quiz duration must be between 3 and 30 minutes.'}), 400
+            quiz.time_duration = time_duration
+        except ValueError:
+            return jsonify({'message': 'Validation Error: Invalid time format.'}), 400
+            
+    if 'remarks' in data:
+        remarks = data.get('remarks', '')
+        if not remarks or len(remarks.strip()) == 0:
+            return jsonify({'message': 'Validation Error: Quiz title cannot be empty.'}), 400
+        quiz.remarks = remarks.strip()
+    # --------------------------
+
     quiz.date_of_quiz = data.get('date_of_quiz', quiz.date_of_quiz)
-    quiz.time_duration = data.get('time_duration', quiz.time_duration)
     db.session.commit()
     cache.delete('user_quizzes')
     return jsonify({'message': 'Quiz updated'}), 200
@@ -164,14 +196,29 @@ def get_questions(quiz_id):
 @admin_bp.route('/quizzes/<int:quiz_id>/questions', methods=['POST'])
 def create_question(quiz_id):
     data = request.get_json()
+    
+    # --- BACKEND VALIDATION ---
+    try:
+        correct_opt = int(data.get('correct_option', 1))
+    except ValueError:
+        return jsonify({'message': 'Validation Error: Invalid correct option format.'}), 400
+        
+    if correct_opt < 1 or correct_opt > 4:
+        return jsonify({'message': 'Validation Error: Correct option must be between 1 and 4.'}), 400
+        
+    statement = data.get('question_statement', '')
+    if not statement or len(statement.strip()) == 0:
+        return jsonify({'message': 'Validation Error: Question statement cannot be empty.'}), 400
+    # --------------------------
+
     new_question = Question(
         quiz_id=quiz_id,
-        question_statement=data.get('question_statement'),
+        question_statement=statement.strip(),
         option1=data.get('option1'),
         option2=data.get('option2'),
         option3=data.get('option3'),
         option4=data.get('option4'),
-        correct_option=int(data.get('correct_option'))
+        correct_option=correct_opt
     )
     db.session.add(new_question)
     db.session.commit()
@@ -183,25 +230,31 @@ def update_question(id):
     question = db.session.get(Question, id)
     if not question: return jsonify({'message': 'Not found'}), 404
     data = request.get_json()
-    question.question_statement = data.get('question_statement', question.question_statement)
+    
+    # --- BACKEND VALIDATION ---
+    if 'correct_option' in data:
+        try:
+            correct_opt = int(data.get('correct_option'))
+            if correct_opt < 1 or correct_opt > 4:
+                return jsonify({'message': 'Validation Error: Correct option must be between 1 and 4.'}), 400
+            question.correct_option = correct_opt
+        except ValueError:
+            return jsonify({'message': 'Validation Error: Invalid correct option format.'}), 400
+            
+    if 'question_statement' in data:
+        statement = data.get('question_statement', '')
+        if not statement or len(statement.strip()) == 0:
+            return jsonify({'message': 'Validation Error: Question statement cannot be empty.'}), 400
+        question.question_statement = statement.strip()
+    # --------------------------
+
     question.option1 = data.get('option1', question.option1)
     question.option2 = data.get('option2', question.option2)
     question.option3 = data.get('option3', question.option3)
     question.option4 = data.get('option4', question.option4)
-    if data.get('correct_option'):
-        question.correct_option = int(data.get('correct_option'))
     db.session.commit()
     cache.delete('user_quizzes')
     return jsonify({'message': 'Question updated'}), 200
-
-@admin_bp.route('/questions/<int:id>', methods=['DELETE'])
-def delete_question(id):
-    question = db.session.get(Question, id)
-    if not question: return jsonify({'message': 'Not found'}), 404
-    db.session.delete(question)
-    db.session.commit()
-    cache.delete('user_quizzes')
-    return jsonify({'message': 'Question deleted'}), 200
 
 
 # --- STUDENTS (UPDATE & DELETE) ---
@@ -399,3 +452,9 @@ def get_student_deep_dive(user_id):
         'missed_quizzes': missed_count,
         'history': history
     }), 200
+
+@admin_bp.route('/notifications', methods=['GET'])
+def get_admin_notifications():
+    # Admins only see global reports
+    notifs = Notification.query.filter_by(user_id=None).order_by(Notification.timestamp.desc()).limit(10).all()
+    return jsonify([n.to_dict() for n in notifs]), 200

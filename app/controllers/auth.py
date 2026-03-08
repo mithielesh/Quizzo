@@ -51,16 +51,11 @@ def logout():
 @bp.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
-    
-    # 1. Force Role to 'user'. NEVER trust frontend input for roles.
-    role = 'user' 
-    
-    # 2. Standard validations
     email = data.get('email')
     password = data.get('password')
-    full_name = data.get('full_name')
-    qualification = data.get('qualification')
-    dob = data.get('dob')
+    full_name = data.get('full_name', '')
+    qualification = data.get('qualification', '')
+    dob = data.get('dob', '') # HTML date pickers send 'YYYY-MM-DD' strings
 
     if not email or not password:
         return jsonify({'message': 'Email and password are required'}), 400
@@ -68,22 +63,24 @@ def register():
     if User.query.filter_by(email=email).first():
         return jsonify({'message': 'User already exists'}), 400
 
-    # 3. Create User
+    # Create User using strings to match the db.String(20) model
     new_user = User(
         email=email, 
-        role=role,  # Hardcoded
+        role='user',
         full_name=full_name,
         qualification=qualification,
-        dob=datetime.strptime(dob, '%Y-%m-%d').date() if dob else None
+        dob=str(dob) # FIX: Keep as string, do not use strptime
     )
     new_user.set_password(password)
     
     try:
         db.session.add(new_user)
         db.session.commit()
+        # Now to_dict() will work because we added it to the model
         return jsonify({'message': 'User created successfully', 'user': new_user.to_dict()}), 201
     except Exception as e:
         db.session.rollback()
+        print(f"Registration Error: {e}")
         return jsonify({'message': 'Registration failed'}), 500
 
 @bp.route("/check", methods=["GET"])

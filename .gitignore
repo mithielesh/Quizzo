@@ -12,6 +12,10 @@ instance/
 *.sqlite3
 *.db
 
+# Ignore the exports
+app/static/exports
+*.csv
+
 # Environment Variables
 .env
 .flaskenv
