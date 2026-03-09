@@ -100,4 +100,4 @@ app/
 
 ## License
 
-MIT License
+![MIT License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)
