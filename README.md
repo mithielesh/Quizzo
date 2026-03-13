@@ -24,13 +24,13 @@ flowchart LR
     Auth([Login]) --> Role{Role?}
 
     %% Admin Flow
-    Role -->|Admin| ADash[Admin Dash]:::admin
+    Role -->|Admin| ADash[Admin Dashboard]:::admin
     ADash --> Manage[Content]:::admin & Analytics[Analytics]:::admin
     Manage --> Create[Create Subjects & Quizzes]:::admin
     Analytics --> Stats[Track Score Trends]:::admin
 
     %% Student Flow
-    Role -->|User| SDash[Student Dash]:::student
+    Role -->|User| SDash[Student Dashboard]:::student
     SDash --> Quizzes[Practice Quizzes]:::student & Perf[Performance Lab]:::student
     Quizzes --> TakeQuiz{Attempt Quiz}:::student -->|Submit| Score[Save Score]:::student --> Perf
     Perf --> Export[CSV Export]:::student
