@@ -54,7 +54,7 @@ flowchart LR
 - Asynchronous data export to CSV format
 
 ### Background Processing
-- Scheduled daily reminders at 18:00
+- Scheduled daily reminders at 18:00 (timeline - Asia-Kolkata)
 - Automated monthly report generation
 - User-triggered asynchronous exports
 
